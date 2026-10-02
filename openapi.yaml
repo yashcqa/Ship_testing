@@ -1,0 +1,326 @@
+openapi: 3.0.3
+info:
+  title: Page & Pine API
+  version: 1.0.0
+  description: >
+    Deterministic API for the Page & Pine demo bookstore. There is no database:
+    the catalogue is fixed in lib/books.js and every rule is documented in README.md.
+servers:
+  - url: /
+    description: Same origin as the web app
+tags:
+  - name: Products
+  - name: Auth
+  - name: Orders
+paths:
+  /api/products:
+    get:
+      tags: [Products]
+      summary: List books, optionally filtered
+      operationId: listProducts
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive match against title or author.
+          schema: { type: string }
+          example: lantern
+        - name: genre
+          in: query
+          required: false
+          description: Exact genre name, or "All".
+          schema:
+            type: string
+            enum: [All, Fiction, Mystery, Science Fiction, Fantasy, Non-fiction, Poetry]
+      responses:
+        "200":
+          description: Matching books
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, books]
+                properties:
+                  count: { type: integer, example: 10 }
+                  books:
+                    type: array
+                    items: { $ref: "#/components/schemas/Book" }
+        "400":
+          description: Unknown genre
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    post:
+      tags: [Products]
+      summary: Add a book (admin)
+      description: >
+        Validates and returns the new book. The server does not persist it; the web app
+        stores added books in the browser's localStorage.
+      operationId: createProduct
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewBook" }
+      responses:
+        "201":
+          description: Book accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  book: { $ref: "#/components/schemas/Book" }
+                  persisted: { type: boolean, example: false }
+        "400":
+          description: Invalid JSON or field errors
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+        "401":
+          description: Missing or wrong bearer token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: A book with the same id (slug of the title) already exists in the catalogue
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/products/{id}:
+    get:
+      tags: [Products]
+      summary: Get one book
+      operationId: getProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          example: the-lantern-keeper
+      responses:
+        "200":
+          description: The book
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  book: { $ref: "#/components/schemas/Book" }
+        "404":
+          description: No book with that id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/login:
+    post:
+      tags: [Auth]
+      summary: Log in with the demo account
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: demo@example.com }
+                password: { type: string, example: password123 }
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400":
+          description: Invalid JSON or missing fields
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+        "401":
+          description: Wrong email or password
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/signup:
+    post:
+      tags: [Auth]
+      summary: Create an account
+      operationId: signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, example: Ada Reader }
+                email: { type: string, format: email, example: ada@example.com }
+                password: { type: string, minLength: 8, example: longenough }
+                confirmPassword: { type: string, description: Optional. Must equal password when sent. }
+      responses:
+        "201":
+          description: Account created and logged in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "400":
+          description: Invalid JSON or field errors
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+        "409":
+          description: Email already registered (demo@example.com and taken@example.com)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/orders:
+    post:
+      tags: [Orders]
+      summary: Place an order
+      description: >
+        Checks run in this order: 400 (invalid JSON, field errors, empty items),
+        404 (unknown bookId), 409 (out of stock or quantity above stock),
+        402 (card 4000000000000002), then 201.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderRequest" }
+      responses:
+        "201":
+          description: Order confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order: { $ref: "#/components/schemas/Order" }
+        "400":
+          description: Invalid JSON, field errors or empty items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
+        "402":
+          description: Card declined
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Unknown book in items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Book out of stock or not enough copies
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Every session uses the fixed token demo-token.
+  schemas:
+    Book:
+      type: object
+      required: [id, title, author, genre, priceCents, stock, description]
+      properties:
+        id: { type: string, example: the-lantern-keeper }
+        title: { type: string, example: The Lantern Keeper }
+        author: { type: string, example: Mara Ellison }
+        genre: { type: string, example: Fiction }
+        priceCents: { type: integer, example: 1699 }
+        stock: { type: integer, example: 12 }
+        cover: { type: string, description: Hex colour used to draw the cover, example: "#2F5D50" }
+        description: { type: string }
+    NewBook:
+      type: object
+      required: [title, author, genre, price, stock, description]
+      properties:
+        title: { type: string, maxLength: 100 }
+        author: { type: string }
+        genre:
+          type: string
+          enum: [Fiction, Mystery, Science Fiction, Fantasy, Non-fiction, Poetry]
+        price: { type: number, minimum: 0.01, maximum: 1000, description: Price in dollars }
+        stock: { type: integer, minimum: 0, maximum: 999 }
+        description: { type: string, minLength: 10 }
+    Session:
+      type: object
+      properties:
+        token: { type: string, example: demo-token }
+        user:
+          type: object
+          properties:
+            name: { type: string }
+            email: { type: string }
+    OrderRequest:
+      type: object
+      required: [name, email, address, city, zip, cardNumber, expiry, cvc, items]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        address: { type: string }
+        city: { type: string }
+        zip: { type: string, pattern: "^\\d{5}$", example: "97201" }
+        cardNumber: { type: string, description: 16 digits; spaces and dashes are ignored, example: "4242424242424242" }
+        expiry: { type: string, pattern: "^(0[1-9]|1[0-2])/\\d{2}$", example: "12/30" }
+        cvc: { type: string, pattern: "^\\d{3}$", example: "123" }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [bookId, quantity]
+            properties:
+              bookId: { type: string, example: the-lantern-keeper }
+              quantity: { type: integer, minimum: 1, example: 1 }
+    Order:
+      type: object
+      properties:
+        id: { type: string, description: Deterministic hash of email and items, example: PP-1A2B3C4 }
+        status: { type: string, example: confirmed }
+        email: { type: string }
+        name: { type: string }
+        shippingAddress:
+          type: object
+          properties:
+            address: { type: string }
+            city: { type: string }
+            zip: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              bookId: { type: string }
+              title: { type: string }
+              quantity: { type: integer }
+              unitPriceCents: { type: integer }
+              lineTotalCents: { type: integer }
+        subtotalCents: { type: integer }
+        shippingCents: { type: integer, example: 0 }
+        totalCents: { type: integer }
+        cardLast4: { type: string, example: "4242" }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    ValidationError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+          example:
+            email: Enter a valid email address.

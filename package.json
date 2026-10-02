@@ -1,0 +1,21 @@
+{
+  "name": "page-and-pine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Page & Pine: a small deterministic Next.js bookstore used as a test fixture.",
+  "scripts": {
+    "dev": "next dev",
+    "prebuild": "node scripts/copy-openapi.mjs",
+    "build": "next build",
+    "start": "next start",
+    "smoke": "node scripts/smoke-test.mjs"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "next": "16.3.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  }
+}
